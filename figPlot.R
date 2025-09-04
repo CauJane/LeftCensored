@@ -1,18 +1,16 @@
 rm(list = ls())
-# load("~/Desktop/左删失/article_leftCensored/multiDLs/lnorm_1_1_env.RData")
-setwd("~/Desktop/左删失/article_leftCensored/20240718/simulations/")
+setwd("./LeftCensored/")
 library(ggplot2)
 library(patchwork)
 library(openxlsx)
-library(reshape2) #数据处理相关
-library(ggplot2) # 绘图相关
-library(grDevices) #绘图颜色相关
-library(RColorBrewer)#绘图颜色相关
-library(directlabels) #等高线相关
+library(reshape2)
+library(ggplot2)
+library(grDevices)
+library(RColorBrewer)
+library(directlabels)
 
 ## 2: Summary of simulation
-## 241030
-pathroot = "/Users/lihua/Desktop/左删失/article_leftCensored/20240718/simulations/ret_241030/"
+pathroot = "./LeftCensored/smy_files/"
 fname_list <- dir(pathroot, full.names = T, pattern = "\\.csv",recursive = TRUE,include.dirs = TRUE)
 pdata_ori = data.frame()
 for(fname in fname_list){
@@ -59,19 +57,6 @@ for(p_id in 1:length(unique(pdata_ori$group))){
           panel.grid.minor = element_blank(),panel.grid.major = element_line(colour = NA))
   p_list[[p_id]] = p
 }
-# p_list[[12]] = ggplot(data = data.frame()) + geom_point() + xlim(0, 1) + ylim(0, 1) + 
-#   geom_segment(aes(x=0.2,y=0.65,xend=0.3,yend=0.65),color="red",lty=2)+
-#   geom_segment(aes(x=0.2,y=0.5,xend=0.3,yend=0.5),color="black")+
-#   geom_point(aes(x=0.25,y=0.5))+
-#   geom_ribbon(data = data.frame(x=c(0.2,0.3),ymin=c(0.3,0.3),ymax=c(0.4,0.4)),aes(x=x,ymin=ymin,ymax=ymax),color="lightgrey",alpha=0.35)+
-#   annotate("text",x=0.35,y=0.65,label=expression("Real value"~omega),size=3,hjust = 0)+
-#   annotate("text",x=0.35,y=0.5,label=expression("Estimated value"~omega^"*"),size=3,hjust = 0)+
-#   annotate("text",x=0.35,y=0.35,label="95% CI",size=3,hjust = 0)+
-#   theme_bw()+
-#   theme(panel.background = element_blank(),panel.border = element_blank(),
-#         axis.text = element_blank(),axis.title = element_blank(),axis.ticks = element_blank(),
-#         panel.grid.minor = element_blank(),panel.grid.major = element_line(colour = NA))
-
 ggsave("Simu_w.eps",p_list[[1]]+p_list[[2]]+p_list[[3]]+p_list[[4]]+p_list[[5]]+p_list[[6]]+p_list[[7]]+p_list[[8]]+p_list[[9]]+p_list[[10]],
        width = 10,height = 6)
 
@@ -122,23 +107,16 @@ save.image(file = "env_simulation.RData")
 
 ## Examples
 rm(list = ls())
-setwd("~/Desktop/左删失/article_leftCensored/20240718/simulations/")
+setwd("./LeftCensored/")
 
 ## EM algorithm
-##创建对数似然函数
-dlnorm_Lm<-function(paras = numeric(), x = numeric(), xd = NA, w0 = NA, n0 = NA, n1 = NA){ #零膨胀比例不为0
+dlnorm_Lm<-function(paras = numeric(), x = numeric(), xd = NA, w0 = NA, n0 = NA, n1 = NA){
   mu<-paras[1] 
   sig<-paras[2]
   if(length(paras)==3){
     w<-paras[3]  #mixtrue model include 3 parameter 
     f=n0*log(w+(1-w)*plnorm(xd,mu,sig))+n1*log(1-w)+sum(log(dlnorm(x,mu,sig)))
-    #3 parameter censored model log-likelihood function
   }else{
-    # if(w0 == 0){
-    #   f=sum(log(dlnorm(x,mu,sig)))
-    # }else{
-    #   f=n0*log(w0+(1-w0)*plnorm(xd,mu,sig))+n1*log(1-w0)+sum(log(dlnorm(x,mu,sig)))
-    # }
     f=n0*log(w0+(1-w0)*plnorm(xd,mu,sig))+n1*log(1-w0)+sum(log(dlnorm(x,mu,sig)))
   }
   return(f) #return log-likelihood value
@@ -333,7 +311,7 @@ EM_estFun <- function(x = numeric(), xd = NA, sample_n = sample_n,
   return(res_merge)
 }
 
-data <- openxlsx::read.xlsx("~/Desktop/左删失/article_leftCensored/20240718/water_single.xlsx",sheet = 2,startRow = 2)
+data <- openxlsx::read.xlsx("./LeftCensored/water_single.xlsx")
 len<-length(data) #number of index in file_k
 index<-colnames(data)
 # type of pesticides: 1-forbidden; 2-others; 3-easily degraded
@@ -367,8 +345,6 @@ rownames(result) = index
 base_chisq = qchisq(0.9,df = 1)
 result$w = ifelse(is.na(result$loglike_H0),result$Pred_w,
                   ifelse(result$LR>=base_chisq,result$Pred_w,0))
-# result$H0_risk = plnorm(limits_vec,result$H0_mu,result$H0_sig,lower.tail = F)
-# result$H1_risk = (1 - result$Pred_w) * plnorm(limits_vec,result$Pred_mu,result$Pred_sig,lower.tail = F)
 result$H0_Fxd = plnorm(xd_vec,result$H0_mu,result$H0_sig,lower.tail = F)
 result$H1_Fxd = (1 - result$Pred_w) * plnorm(xd_vec,result$Pred_mu,result$Pred_sig,lower.tail = F)
 result$diff = abs(result$H0_Fxd - result$H1_Fxd)
@@ -377,8 +353,7 @@ col_label = col_label[order(result$w)]
 result = result[order(result$w),]
 result_sele = result[,c("censored_rate","H0_mu","H0_sig","loglike_H0","Pred_mu","Pred_sig","Pred_w","logLike","w")]
 
-write.csv(result,"water_pesticides250709.csv",row.names = T)
-#write.table(w_est,"est_w.txt")
+write.csv(result,"water_pesticides.csv",row.names = T)
 
 ## Fig of a certain sample
 sele_sampe = "Parathion"
@@ -414,7 +389,6 @@ if(tmp_res$LR > base_chisq){
   Pred_w = 0
 }
 p0 <- ggplot()+
-  # geom_point(data = barData,aes(x=x,y=probability),pch=3)+
   geom_point(data = data.frame(x=x),aes(x=x,y=0),cex=3)+
   geom_bar(data = barData,aes(x=x,y=probability),stat="identity",just = 0,
            fill="transparent",color="black",width = c(diff(barData$x),0))+#diff(hist_x$breaks)[1]
@@ -438,7 +412,7 @@ p0 <- ggplot()+
         panel.grid.minor = element_blank(),panel.grid.major = element_line(colour = NA))
 ggsave(paste0(sele_sampe,".eps"),p0,width = 10,height = 6)
 
-arg_names = character()#gsub("\\."," ",rownames(result))
+arg_names = character()
 for(i in 1:length(rownames(result))){
   if(i == 19){
     arg_names_tmp = expression(beta~"-HCH")
@@ -454,7 +428,6 @@ box_data = barplot(result$w,names.arg=arg_names,
                    col = sapply(col_label,function(x){ifelse(x==1,1,ifelse(x==2,1,8))}),
                    density = sapply(col_label,function(x){ifelse(x==1,0,ifelse(x==2,10,NA))}),
                    angle = sapply(col_label,function(x){ifelse(x==1,0,ifelse(x==2,30,45))}),
-                   #ylab="Pesticides",space = 0.1,
                    las=2,cex.names = 0.8,xlab = NULL,xlim = c(0,1),horiz = T)
 text(x=-0.25,y=median(box_data),xpd=T,srt=90,"Pesticides")
 text(x=0.5,y=-4.5,xpd=T,
