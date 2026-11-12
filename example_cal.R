@@ -1,0 +1,508 @@
+rm(list = ls())
+setwd("/Users/lihua/Desktop/零膨胀多检出线/calculation/")
+### 食品检测数据计算
+output_dir <- getwd()
+
+# ============================================================
+## 定义基础函数
+# ============================================================
+observe_method <- function(x,n,d){
+  y <- sample(x,n)
+  list(n=n,r=sum(y<d),detected=y[y>=d])
+}
+
+get_initial_omega <- function(n, r, tol) {
+  stopifnot(all(n > 0L), all(r >= 0L), all(r <= n))
+  observed_nd <- r / n
+  discrepancy <- ifelse(all(observed_nd <= tol), min(observed_nd), max(observed_nd - tol))
+}
+
+em_omega <- function(r,n,vec_F,tol,tol_em = 1e-6){
+  M <- sum(n - r)
+  if (M == 0L) return(list(omega=1,iter=0))
+  
+  # Avoid machine underflow when a trial (mu, sigma) is extreme.
+  # 0 < F_j < 1
+  vec_F <- pmin(pmax(vec_F, 1e-12), 1 - 1e-12)
+  D0 <- sum(r * (1 - vec_F) / vec_F) - M
+  if (D0 <= 0) return(list(omega=0,iter=0))
+  
+  N0 <- sum(n)
+  omega <- get_initial_omega(n, r, tol)
+  for(i in 1:max_iter){
+    omega_new <- sum(r*omega/(vec_F+(1-vec_F)*omega))/N0
+    if(abs(omega_new-omega)<tol_em) return(list(omega=omega_new,iter=i))
+    omega <- omega_new
+  }
+  list(omega=omega,iter=max_iter)
+}
+
+loglik <- function(omega,r,n,vec_F,detected_C0){
+  M <- sum(n-r)
+  M*log(1-omega)+sum(r*log(vec_F+(1-vec_F)*omega))+detected_C0
+}
+
+estimate_F_omega <- function(r,n,tol_em,fix_F,d, mu_true, sig_true, detected, 
+                             mu_lim = c(-1,1), sig_lim = c(0.1,2), tol = 0.1){
+  best <- list(ll=-Inf)
+  if(fix_F){
+    F1_grid <- mu_true
+    F2_grid <- sig_true
+  }else{
+    F1_grid <- seq(round(mu_lim[1],digits = log10(1/tol)),mu_lim[2],by=tol)
+    F2_grid <- seq(round(sig_lim[1],digits = log10(1/tol)),sig_lim[2],by=tol)
+  }
+  ret_data = data.frame()
+  for(mu in F1_grid){
+    for(sig in F2_grid){
+      vec_F <- plnorm(d, meanlog = mu, sdlog = sig)
+      em <- em_omega(r,n,vec_F,tol = tol,tol_em)
+      detected_C0 = sum(log(dlnorm(detected, meanlog = mu, sdlog = sig)))
+      ll <- loglik(em$omega,r,n,vec_F,detected_C0)
+      if(ll>best$ll) best <- list(F=vec_F,omega=em$omega,mu=mu,sig=sig,iter=em$iter,ll=ll)
+    }
+  }
+  best
+}
+
+# ============================================================
+## 0. 公共参数
+# ============================================================
+tol_em = 1e-6 #EM估计值的容忍误差
+max_iter <- 10000
+n_repeat <- 1000
+fix_F = FALSE
+##------- Bootstrap 重采样分析 --------
+bootstrap_data_list <- function(
+  data_list,
+  B = 1000,
+  seed = NULL
+) {
+  
+  #====================================================
+  # 1. 检查输入数据
+  #====================================================
+  
+  if (!is.list(data_list) || length(data_list) == 0) {
+    stop("data_list 必须为非空列表")
+  }
+  
+  if (!is.numeric(B) ||
+      length(B) != 1 ||
+      !is.finite(B) ||
+      B < 1 ||
+      B != as.integer(B)) {
+    stop("B 必须为正整数")
+  }
+  
+  B <- as.integer(B)
+  
+  for (j in seq_along(data_list)) {
+    
+    group <- data_list[[j]]
+    
+    if (!all(c("n", "r", "detected") %in% names(group))) {
+      stop(paste0("第 ", j, " 组缺少必要字段"))
+    }
+    
+    n <- group$n
+    r <- group$r
+    detected <- group$detected
+    
+    if (length(n) != 1 ||
+        length(r) != 1 ||
+        !is.finite(n) ||
+        !is.finite(r) ||
+        n < 1 ||
+        r < 0 ||
+        r > n ||
+        n != floor(n) ||
+        r != floor(r)) {
+      stop(paste0("第 ", j, " 组 n 或 r 不合法"))
+    }
+    
+    if (!is.numeric(detected) ||
+        any(!is.finite(detected))) {
+      stop(paste0("第 ", j, " 组 detected 不合法"))
+    }
+    
+    if (length(detected) != n - r) {
+      stop(
+        paste0(
+          "第 ", j, " 组数据不一致：",
+          "length(detected) != n - r"
+        )
+      )
+    }
+  }
+  
+  #====================================================
+  # 2. 设置随机种子
+  #====================================================
+  
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
+  
+  #====================================================
+  # 3. 单次Bootstrap重采样
+  #====================================================
+  
+  bootstrap_once <- function(data_list) {
+    
+    result <- lapply(data_list, function(group) {
+      
+      n <- as.integer(group$n)
+      r <- as.integer(group$r)
+      detected <- group$detected
+      
+      # 原始未检出比例
+      p_nd <- r / n
+      
+      # 重采样未检出数量
+      r_boot <- rbinom(
+        n = 1,
+        size = n,
+        prob = p_nd
+      )
+      
+      # 重采样检出数量
+      m_boot <- n - r_boot
+      
+      # 从原始检出浓度中有放回抽样
+      if (m_boot > 0) {
+        
+        index <- sample.int(
+          n = length(detected),
+          size = m_boot,
+          replace = TRUE
+        )
+        
+        detected_boot <- detected[index]
+        
+      } else {
+        
+        detected_boot <- numeric(0)
+        
+      }
+      
+      # 保持原始数据结构
+      list(
+        n = n,
+        r = as.integer(r_boot),
+        detected = detected_boot
+      )
+    })
+    
+    return(result)
+  }
+  
+  #====================================================
+  # 4. 重复B次
+  #====================================================
+  
+  bootstrap_results <- replicate(
+    n = B,
+    expr = bootstrap_once(data_list),
+    simplify = FALSE
+  )
+  
+  return(bootstrap_results)
+}
+
+ana_bootstrap = function(data_list,d,n_repeat = 1000,seed = NULL){
+  bootstrap_list = bootstrap_data_list(data_list,B = n_repeat,seed = seed)
+  
+  results <- list()
+  for(k in 1:n_repeat){
+    r = numeric()
+    n = numeric()
+    detected = numeric()
+    for(j in 1:length(bootstrap_list[[k]])){
+      r = append(r, bootstrap_list[[k]][[j]]$r)
+      n = append(n, bootstrap_list[[k]][[j]]$n)
+      detected = append(detected, bootstrap_list[[k]][[j]]$detected)
+    }
+    mu_x = mean(log(detected))
+    sig_x = sd(log(detected))
+    mu_lim = mu_x + c(-3,3)*sig_x
+    sig_lim = c(0.1,2)*sig_x
+    
+    est <- estimate_F_omega(r,n,tol_em,fix_F = fix_F,d = d, detected = detected,
+                            mu_lim = mu_lim, sig_lim = sig_lim)
+    results[[k]] <- data.frame(No=k,omega_hat=est$omega,mu_hat=est$mu,sig_hat=est$sig,iter=est$iter)
+    rm(list = c("mu_x","sig_x","mu_lim","sig_lim","est"))
+  }
+
+  result <- do.call(rbind,results)
+  return(result)
+}
+
+##------- 多种检测方法的组合分析 --------
+ana_fun_meths = function(data_list,d){
+  x = unlist(lapply(data_list,FUN = function(x){x$detected}))
+  mu_x = mean(log(x)); sig_x = sd(log(x))
+  mu_lim = mu_x + c(-3,3)*sig_x
+  sig_lim = c(0.1,2)*sig_x
+  results <- list(); k <- 1
+  for(num_i in 1:length(data_list)){
+    if(num_i == 1){
+      for(i in 1:length(data_list)){
+        ana_data = data_list[[i]]
+        r <- ana_data$r
+        n <- ana_data$n
+        detected <- ana_data$detected
+        est <- estimate_F_omega(r,n,tol_em,fix_F = fix_F,d = d[i], detected = detected,
+                                mu_lim = mu_lim, sig_lim = sig_lim)
+        results[[k]] <- data.frame(Name=paste0("M",i),
+                                   Nums_of_Meths=num_i,d=as.character(d[i]),
+                                   omega_hat=est$omega,mu_hat=est$mu,sig_hat=est$sig,iter=est$iter)
+        k <- k+1
+        rm(list = c("ana_data","r","n","detected","est"))
+      }
+    }else{
+      comb_gr = combn(length(data_list),num_i)
+      for(i in 1:ncol(comb_gr)){
+        r = numeric()
+        n = numeric()
+        detected = numeric()
+        for(j in 1:nrow(comb_gr)){
+          r = append(r, data_list[[j]]$r)
+          n = append(n, data_list[[j]]$n)
+          detected = append(detected, data_list[[j]]$detected)
+        }
+        est <- estimate_F_omega(r,n,tol_em,fix_F = fix_F,d = d[comb_gr[,i]], detected = detected,
+                                mu_lim = mu_lim, sig_lim = sig_lim)
+        results[[k]] <- data.frame(Name=paste(paste0("M",comb_gr[,i]),collapse = "-"),
+                                   Nums_of_Meths=num_i,d=paste(d[comb_gr[,i]],collapse = ","),
+                                   omega_hat=est$omega,mu_hat=est$mu,sig_hat=est$sig,iter=est$iter)
+        k <- k+1
+        rm(list = c("r","n","detected","est"))
+      }
+    }
+  }
+  result <- do.call(rbind,results)
+  return(result)
+}
+
+library(dplyr)
+library(ggplot2)
+# ================ 案例：毒死蜱检测 =======================
+data_ori = openxlsx::read.xlsx("SI_tables.xlsx", sheet = 1)
+d_list = sort(unique(data_ori$`Detection.limit`),decreasing = T)
+data_infos = data.frame(N=rep(nrow(data_ori),length(d_list)),
+                        NumsOfFood=rep(length(unique(data_ori$Food)),length(d_list)),
+                        NumsOfProv=rep(length(unique(data_ori$`Sampling.Unit`)),length(d_list)),
+                        d_j=d_list)
+d = numeric()
+r_list = numeric()
+n_list = numeric()
+data_list = list(); k = 1
+for(i in 1:length(d_list)){
+  tmp_x = data_ori$`Concentration.(mg/kg)`[which(data_ori$`Detection.limit`==d_list[i])]
+  n_list = append(n_list, length(tmp_x))
+  r_list = append(r_list, length(which(tmp_x == "ND")))
+  tmp_detected = tmp_x[which(tmp_x != "ND")]
+  if(length(tmp_detected)!=0){
+    data_list[[k]] = list(n=length(tmp_x),r=length(which(tmp_x == "ND")),
+                          detected=as.numeric(tmp_detected))
+    d = append(d, d_list[i])
+    k = k + 1
+  }else{
+    if(i != 1){
+      data_list[[k-1]]$n = data_list[[k-1]]$n + length(tmp_x)
+      data_list[[k-1]]$r = data_list[[k-1]]$r + length(which(tmp_x == "ND"))
+    }
+  }
+  # data_list[[k]] = list(n=length(tmp_x),r=length(which(tmp_x == "ND")),
+  #                       detected=as.numeric(tmp_detected))
+  # d = append(d, d_list[i])
+  # if(i != 1){
+  #   data_list[[k-1]]$n = data_list[[k-1]]$n + length(tmp_x)
+  #   data_list[[k-1]]$r = data_list[[k-1]]$r + length(which(tmp_x == "ND"))
+  # }
+  # k = k + 1
+}
+data_infos$r_j = r_list
+data_infos$n_j = n_list
+write.csv(data_infos, file.path(output_dir, "data_infos-毒死蜱.csv"), row.names = F)
+
+## 通过bootstrap分层重采样计算95%CI
+result_b1 <- ana_bootstrap(data_list = data_list, d = d, seed = 111)
+omega_mean = mean(result_b1$omega_hat)
+omega_lower = quantile(result_b1$omega_hat, probs = 0.025)
+omega_upper = quantile(result_b1$omega_hat, probs = 0.975)
+cat("omega^* = ",round(omega_mean,digits = 3),
+    "; 95%CI: [",round(omega_lower,digits = 3),",",round(omega_upper,digits = 3),"]",sep = "")
+
+## 通过多检出限组合重采样计算95%CI
+result_1 <- ana_fun_meths(data_list = data_list, d = d)
+omega_mean = round(result_1$omega_hat[nrow(result_1)],digits = 3)#mean(result_1$omega_hat, na.rm = TRUE)
+omega_sd = sd(result_1$omega_hat, na.rm = TRUE)
+omega_se = omega_sd / sqrt(nrow(result_1))
+omega_lower = omega_mean - qt(0.975, df = nrow(result_1) - 1) * omega_se
+omega_upper = omega_mean + qt(0.975, df = nrow(result_1) - 1) * omega_se
+cat("omega^* = ",omega_mean,
+    "; 95%CI: [",round(omega_lower,digits = 3),",",round(omega_upper,digits = 3),"]",sep = "")
+
+# ================ 案例：铅检测 =======================
+data_ori = openxlsx::read.xlsx("SI_tables.xlsx", sheet = 2)
+d_list = sort(unique(data_ori$`Detection.limit`),decreasing = T)
+data_infos = data.frame(N=rep(nrow(data_ori),length(d_list)),
+                        NumsOfFood=rep(length(unique(data_ori$Food)),length(d_list)),
+                        NumsOfProv=rep(length(unique(data_ori$`Sampling.Unit`)),length(d_list)),
+                        d_j=d_list)
+d = numeric()
+r_list = numeric()
+n_list = numeric()
+n_min = 30
+data_list = list(); k = 1
+for(i in 1:length(d_list)){
+  tmp_x = data_ori$`Concentration.(mg/kg)`[which(data_ori$`Detection.limit`==d_list[i])]
+  n_list = append(n_list, length(tmp_x))
+  r_list = append(r_list, length(which(tmp_x == "ND")))
+  
+  if(length(tmp_x) < n_min) next
+  tmp_detected = tmp_x[which(tmp_x != "ND")]
+  if(length(tmp_detected)!=0){
+    data_list[[k]] = list(n=length(tmp_x),r=length(which(tmp_x == "ND")),
+                          detected=as.numeric(tmp_detected))
+    d = append(d, d_list[i])
+    k = k + 1
+  }else{
+    if(i != 1){
+      data_list[[k-1]]$n = data_list[[k-1]]$n + length(tmp_x)
+      data_list[[k-1]]$r = data_list[[k-1]]$r + length(which(tmp_x == "ND"))
+    }
+  }
+}
+data_infos$r_j = r_list
+data_infos$n_j = n_list
+
+write.csv(data_infos, file.path(output_dir, "data_infos-铅.csv"), row.names = F)
+
+## 通过bootstrap分层重采样计算95%CI
+result_b2 <- ana_bootstrap(data_list = data_list, d = d, seed = 222)
+omega_mean = mean(result_b2$omega_hat)
+omega_lower = quantile(result_b2$omega_hat, probs = 0.025)
+omega_upper = quantile(result_b2$omega_hat, probs = 0.975)
+cat("omega^* = ",round(omega_mean,digits = 3),
+    "; 95%CI: [",round(omega_lower,digits = 3),",",round(omega_upper,digits = 3),"]",sep = "")
+
+## 通过多检出限组合重采样计算95%CI
+result_2 <- ana_fun_meths(data_list = data_list, d = d)
+omega_mean = round(result_2$omega_hat[nrow(result_2)],digits = 3)#mean(result_2$omega_hat, na.rm = TRUE)
+omega_sd = sd(result_2$omega_hat, na.rm = TRUE)
+omega_se = omega_sd / sqrt(nrow(result_2))
+omega_lower = omega_mean - qt(0.975, df = nrow(result_2) - 1) * omega_se
+omega_upper = omega_mean + qt(0.975, df = nrow(result_2) - 1) * omega_se
+cat("omega^* = ",omega_mean,
+    "; 95%CI: [",round(omega_lower,digits = 3),",",round(omega_upper,digits = 3),"]",sep = "")
+
+#----------- 画图 -------------
+plot_data <- result_1 %>%
+  arrange(Nums_of_Meths, desc(omega_hat))
+plot_data$Nums_of_Meths <- factor(
+  plot_data$Nums_of_Meths,
+  levels = unique(plot_data$Nums_of_Meths)
+)
+plot_data$Name <- factor(
+  plot_data$Name,
+  levels = unique(plot_data$Name)
+)
+p_hist <- ggplot(plot_data,
+                 aes(x = Name, y = omega_hat, color = Nums_of_Meths)) +
+  # 棒
+  geom_segment(
+    aes(
+      xend = Name,
+      y = 0,
+      yend = omega_hat
+    ),
+    linewidth = 0.8
+  ) +
+  # 顶端点
+  geom_point(
+    size = 3
+  ) +
+  labs(
+    x = NULL,
+    y = expression('Estimated zero-exposure proportion'~omega^'*'),
+    color = "Nums of Methods"
+  ) +
+  scale_color_brewer(palette = "Set1") +
+  guides(color=guide_legend(ncol = 3, byrow= TRUE )) +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.text.x = element_text(
+      # angle = 30,
+      # hjust = 1,
+      hjust = 0.5,
+      size = 6.5, face = "bold"
+    ),
+    axis.title = element_text(
+      face = "plain"
+    ),
+    # legend.position = c(0.8,0.8),
+    legend.position = "top",
+    legend.title = element_text(
+      face = "plain"
+    ),
+    panel.grid = element_blank()
+  )
+
+# 输出
+ggsave(
+  "example_hist-毒死蜱.jpg",
+  p_hist,
+  width = 5,
+  height = 3.5,
+  dpi = 300
+)
+ggsave(
+  "example_hist-铅.jpg",
+  p_hist,
+  width = 10,
+  height = 4,
+  dpi = 300
+)
+
+boxData = data.frame(omega = append(result_1$omega_hat,result_2$omega_hat),
+                     label = rep(c("Chlorpyrifos","Lead"),times=c(nrow(result_1),nrow(result_2))))
+
+p_box <- ggplot(
+  boxData,
+  aes(
+    x = label,
+    y = omega
+  )
+) +
+  geom_boxplot() +
+  geom_jitter(
+    width = 0.15,
+    height = 0
+  ) +
+  labs(
+    x = NULL,
+    y = expression('Estimated zero-exposure proportion'~omega^'*')
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.text.x = element_text(
+      hjust = 0.5, face = "bold"
+    ),
+    axis.title = element_text(
+      face = "plain"
+    ),
+    panel.grid = element_blank()
+  )
+ggsave(
+  "example_box.jpg",
+  p_box,
+  width = 5,
+  height = 3.5,
+  dpi = 300
+)
+
+
+
