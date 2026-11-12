@@ -1,10 +1,10 @@
 rm(list = ls())
-setwd("/Users/lihua/Desktop/零膨胀多检出线/calculation/")
-### 食品检测数据计算
+setwd("/Pathway/to/save/")
+### Calculation of example data
 output_dir <- getwd()
 
 # ============================================================
-## 定义基础函数
+## Define basic functions
 # ============================================================
 observe_method <- function(x,n,d){
   y <- sample(x,n)
@@ -66,13 +66,13 @@ estimate_F_omega <- function(r,n,tol_em,fix_F,d, mu_true, sig_true, detected,
 }
 
 # ============================================================
-## 0. 公共参数
+## 0. Common parameters
 # ============================================================
-tol_em = 1e-6 #EM估计值的容忍误差
+tol_em = 1e-6 #Tolerance for EM estimates
 max_iter <- 10000
 n_repeat <- 1000
 fix_F = FALSE
-##------- Bootstrap 重采样分析 --------
+##------- Bootstrap Resampling Analysis --------
 bootstrap_data_list <- function(
   data_list,
   B = 1000,
@@ -80,11 +80,11 @@ bootstrap_data_list <- function(
 ) {
   
   #====================================================
-  # 1. 检查输入数据
+  # 1. Check input data
   #====================================================
   
   if (!is.list(data_list) || length(data_list) == 0) {
-    stop("data_list 必须为非空列表")
+    stop("data_list must be null list")
   }
   
   if (!is.numeric(B) ||
@@ -92,7 +92,7 @@ bootstrap_data_list <- function(
       !is.finite(B) ||
       B < 1 ||
       B != as.integer(B)) {
-    stop("B 必须为正整数")
+    stop("B must be a positive integer")
   }
   
   B <- as.integer(B)
@@ -102,7 +102,7 @@ bootstrap_data_list <- function(
     group <- data_list[[j]]
     
     if (!all(c("n", "r", "detected") %in% names(group))) {
-      stop(paste0("第 ", j, " 组缺少必要字段"))
+      stop(paste0("No ", j, " group miss required fields"))
     }
     
     n <- group$n
@@ -118,18 +118,18 @@ bootstrap_data_list <- function(
         r > n ||
         n != floor(n) ||
         r != floor(r)) {
-      stop(paste0("第 ", j, " 组 n 或 r 不合法"))
+      stop(paste0("No ", j, " group: n or r is illegal"))
     }
     
     if (!is.numeric(detected) ||
         any(!is.finite(detected))) {
-      stop(paste0("第 ", j, " 组 detected 不合法"))
+      stop(paste0("No ", j, " group: detected is illegal"))
     }
     
     if (length(detected) != n - r) {
       stop(
         paste0(
-          "第 ", j, " 组数据不一致：",
+          "Data in No ", j, " group is inconsistency：",
           "length(detected) != n - r"
         )
       )
@@ -137,7 +137,7 @@ bootstrap_data_list <- function(
   }
   
   #====================================================
-  # 2. 设置随机种子
+  # 2. Set the random seed
   #====================================================
   
   if (!is.null(seed)) {
@@ -145,7 +145,7 @@ bootstrap_data_list <- function(
   }
   
   #====================================================
-  # 3. 单次Bootstrap重采样
+  # 3. Single Bootstrap Resampling
   #====================================================
   
   bootstrap_once <- function(data_list) {
@@ -156,20 +156,20 @@ bootstrap_data_list <- function(
       r <- as.integer(group$r)
       detected <- group$detected
       
-      # 原始未检出比例
+      # Undetected proportion of raw data
       p_nd <- r / n
       
-      # 重采样未检出数量
+      # Number of undetected resamples
       r_boot <- rbinom(
         n = 1,
         size = n,
         prob = p_nd
       )
       
-      # 重采样检出数量
+      # Number of detections after resampling
       m_boot <- n - r_boot
       
-      # 从原始检出浓度中有放回抽样
+      # Sampling with replacement from the initial detected concentrations
       if (m_boot > 0) {
         
         index <- sample.int(
@@ -186,7 +186,7 @@ bootstrap_data_list <- function(
         
       }
       
-      # 保持原始数据结构
+      # Preserve the original data structure
       list(
         n = n,
         r = as.integer(r_boot),
@@ -198,7 +198,7 @@ bootstrap_data_list <- function(
   }
   
   #====================================================
-  # 4. 重复B次
+  # 4. Repeat B times
   #====================================================
   
   bootstrap_results <- replicate(
@@ -238,7 +238,7 @@ ana_bootstrap = function(data_list,d,n_repeat = 1000,seed = NULL){
   return(result)
 }
 
-##------- 多种检测方法的组合分析 --------
+##------- Analysis for combinations of multiple detection methods --------
 ana_fun_meths = function(data_list,d){
   x = unlist(lapply(data_list,FUN = function(x){x$detected}))
   mu_x = mean(log(x)); sig_x = sd(log(x))
@@ -287,7 +287,7 @@ ana_fun_meths = function(data_list,d){
 
 library(dplyr)
 library(ggplot2)
-# ================ 案例：毒死蜱检测 =======================
+# ================ Case Study: Detection of Chlorpyrifos =======================
 data_ori = openxlsx::read.xlsx("SI_tables.xlsx", sheet = 1)
 d_list = sort(unique(data_ori$`Detection.limit`),decreasing = T)
 data_infos = data.frame(N=rep(nrow(data_ori),length(d_list)),
@@ -314,20 +314,12 @@ for(i in 1:length(d_list)){
       data_list[[k-1]]$r = data_list[[k-1]]$r + length(which(tmp_x == "ND"))
     }
   }
-  # data_list[[k]] = list(n=length(tmp_x),r=length(which(tmp_x == "ND")),
-  #                       detected=as.numeric(tmp_detected))
-  # d = append(d, d_list[i])
-  # if(i != 1){
-  #   data_list[[k-1]]$n = data_list[[k-1]]$n + length(tmp_x)
-  #   data_list[[k-1]]$r = data_list[[k-1]]$r + length(which(tmp_x == "ND"))
-  # }
-  # k = k + 1
 }
 data_infos$r_j = r_list
 data_infos$n_j = n_list
-write.csv(data_infos, file.path(output_dir, "data_infos-毒死蜱.csv"), row.names = F)
+write.csv(data_infos, file.path(output_dir, "data_infos-Chlorpyrifos.csv"), row.names = F)
 
-## 通过bootstrap分层重采样计算95%CI
+## calculate 95%CI
 result_b1 <- ana_bootstrap(data_list = data_list, d = d, seed = 111)
 omega_mean = mean(result_b1$omega_hat)
 omega_lower = quantile(result_b1$omega_hat, probs = 0.025)
@@ -335,17 +327,10 @@ omega_upper = quantile(result_b1$omega_hat, probs = 0.975)
 cat("omega^* = ",round(omega_mean,digits = 3),
     "; 95%CI: [",round(omega_lower,digits = 3),",",round(omega_upper,digits = 3),"]",sep = "")
 
-## 通过多检出限组合重采样计算95%CI
+## results of multiple detection limits in different combinations
 result_1 <- ana_fun_meths(data_list = data_list, d = d)
-omega_mean = round(result_1$omega_hat[nrow(result_1)],digits = 3)#mean(result_1$omega_hat, na.rm = TRUE)
-omega_sd = sd(result_1$omega_hat, na.rm = TRUE)
-omega_se = omega_sd / sqrt(nrow(result_1))
-omega_lower = omega_mean - qt(0.975, df = nrow(result_1) - 1) * omega_se
-omega_upper = omega_mean + qt(0.975, df = nrow(result_1) - 1) * omega_se
-cat("omega^* = ",omega_mean,
-    "; 95%CI: [",round(omega_lower,digits = 3),",",round(omega_upper,digits = 3),"]",sep = "")
 
-# ================ 案例：铅检测 =======================
+# ================ Case Study: Detection of Lead =======================
 data_ori = openxlsx::read.xlsx("SI_tables.xlsx", sheet = 2)
 d_list = sort(unique(data_ori$`Detection.limit`),decreasing = T)
 data_infos = data.frame(N=rep(nrow(data_ori),length(d_list)),
@@ -379,9 +364,9 @@ for(i in 1:length(d_list)){
 data_infos$r_j = r_list
 data_infos$n_j = n_list
 
-write.csv(data_infos, file.path(output_dir, "data_infos-铅.csv"), row.names = F)
+write.csv(data_infos, file.path(output_dir, "data_infos-Lead.csv"), row.names = F)
 
-## 通过bootstrap分层重采样计算95%CI
+## calculate 95%CI
 result_b2 <- ana_bootstrap(data_list = data_list, d = d, seed = 222)
 omega_mean = mean(result_b2$omega_hat)
 omega_lower = quantile(result_b2$omega_hat, probs = 0.025)
@@ -389,17 +374,10 @@ omega_upper = quantile(result_b2$omega_hat, probs = 0.975)
 cat("omega^* = ",round(omega_mean,digits = 3),
     "; 95%CI: [",round(omega_lower,digits = 3),",",round(omega_upper,digits = 3),"]",sep = "")
 
-## 通过多检出限组合重采样计算95%CI
+## results of multiple detection limits in different combinations
 result_2 <- ana_fun_meths(data_list = data_list, d = d)
-omega_mean = round(result_2$omega_hat[nrow(result_2)],digits = 3)#mean(result_2$omega_hat, na.rm = TRUE)
-omega_sd = sd(result_2$omega_hat, na.rm = TRUE)
-omega_se = omega_sd / sqrt(nrow(result_2))
-omega_lower = omega_mean - qt(0.975, df = nrow(result_2) - 1) * omega_se
-omega_upper = omega_mean + qt(0.975, df = nrow(result_2) - 1) * omega_se
-cat("omega^* = ",omega_mean,
-    "; 95%CI: [",round(omega_lower,digits = 3),",",round(omega_upper,digits = 3),"]",sep = "")
 
-#----------- 画图 -------------
+#----------- Plot codes -------------
 plot_data <- result_1 %>%
   arrange(Nums_of_Meths, desc(omega_hat))
 plot_data$Nums_of_Meths <- factor(
@@ -412,7 +390,6 @@ plot_data$Name <- factor(
 )
 p_hist <- ggplot(plot_data,
                  aes(x = Name, y = omega_hat, color = Nums_of_Meths)) +
-  # 棒
   geom_segment(
     aes(
       xend = Name,
@@ -421,7 +398,6 @@ p_hist <- ggplot(plot_data,
     ),
     linewidth = 0.8
   ) +
-  # 顶端点
   geom_point(
     size = 3
   ) +
@@ -451,16 +427,16 @@ p_hist <- ggplot(plot_data,
     panel.grid = element_blank()
   )
 
-# 输出
+# output
 ggsave(
-  "example_hist-毒死蜱.jpg",
+  "example_hist-Chlorpyrifos.jpg",
   p_hist,
   width = 5,
   height = 3.5,
   dpi = 300
 )
 ggsave(
-  "example_hist-铅.jpg",
+  "example_hist-Lead.jpg",
   p_hist,
   width = 10,
   height = 4,
