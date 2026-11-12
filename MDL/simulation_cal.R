@@ -1,6 +1,6 @@
 rm(list = ls())
-setwd("/Users/lihua/Desktop/零膨胀多检出线/calculation/")
-### 模拟计算
+setwd("/Pathway/to/save/")
+### Simulation calculation
 output_dir <- file.path(getwd(), "simulation")
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 library(ggplot2)
@@ -8,7 +8,7 @@ library(patchwork)
 library(dplyr)
 
 # ============================================================
-## 定义基础函数
+## Define basic functions
 # ============================================================
 generate_sample <- function(N,omega,mu = 0,sigma = 1){
   z <- rbinom(N,1,1-omega)
@@ -77,7 +77,7 @@ estimate_F_omega <- function(r,n,tol_em,fix_F,d, mu_true, sig_true, detected,
 }
 
 # ============================================================
-## 0. 公共参数
+## 0. common parameters
 # ============================================================
 omega_true <- 0.10
 mu <- 0
@@ -85,13 +85,15 @@ sigma <- 1
 cost <- c(200,50)
 F1_true = 0.10; F2_true = 0.30
 d <- c(qlnorm(F1_true,mu,sigma), qlnorm(F2_true,mu,sigma))
-tol_em = 1e-6 #EM估计值的容忍误差
+tol_em = 1e-6 
 max_iter <- 10000
 n_repeat <- 1000
 fix_F = FALSE
 
 # ============================================================
-## 3. 固定成本时，计算不同分配比例下的最大采样数量对估计值的影响
+## For fixed costs, calculate the impact of different 
+## allocation ratios on the maximum sample size and its 
+## effect on the estimated values.
 # ============================================================
 set.seed(345)
 
@@ -130,99 +132,86 @@ result3 <- do.call(rbind,results)
 summary_result3 <- result3 %>%
   group_by(N, n1, n2, cost, cost_pro) %>%
   summarise(
-    # 每种分配方式的数据量
+
     count = n(),
     
-    # 估计偏差的均值和方差
     abs_omega_mean = mean(abs_omega, na.rm = TRUE),
     abs_omega_sd  = sd(abs_omega, na.rm = TRUE),
     
-    # omega_hat 的均值和样本方差
     omega_mean = mean(omega_hat, na.rm = TRUE),
     omega_sd  = sd(omega_hat, na.rm = TRUE),
     
-    # omega_hat 均值的 95%CI
     omega_ci_lower = quantile(omega_hat, 0.025, na.rm = TRUE),
     omega_ci_upper = quantile(omega_hat, 0.975, na.rm = TRUE),
     
-    # mu_hat 的均值和样本方差
     mu_mean = mean(mu_hat, na.rm = TRUE),
     mu_sd  = sd(mu_hat, na.rm = TRUE),
     
-    # mu_hat 均值的 95%CI
     mu_ci_lower = quantile(mu_hat, 0.025, na.rm = TRUE),
     mu_ci_upper = quantile(mu_hat, 0.975, na.rm = TRUE),
     
-    # sig_hat 的均值和样本方差
     sig_mean = mean(sig_hat, na.rm = TRUE),
     sig_sd  = sd(sig_hat, na.rm = TRUE),
     
-    # mu_hat 均值的 95%CI
     sig_ci_lower = quantile(sig_hat, 0.025, na.rm = TRUE),
     sig_ci_upper = quantile(sig_hat, 0.975, na.rm = TRUE),
     
     .groups = "drop"
   )
-# 目标优化函数
+# Objective optimization function
 summary_result3$optim_fun = summary_result3$omega_sd*summary_result3$cost_pro+summary_result3$abs_omega_mean
 
-# 如需导出 CSV 文件
+# ouput CSV file if needed
 write.csv(
   summary_result3,
   file.path(output_dir, "summary_result_fix_cost-261103.csv"),
   row.names = FALSE
 )
 
-## 画图代码
+## plot codes
 plot_tile_heatmap <- function(
   data,
   x_col,
   y_col,
   fill_col,
   
-  # 坐标轴标题
   x_label = NULL,
   y_label = NULL,
   fill_label = NULL,
   
-  # 颜色设置
   low_color = "#D73027",
   mid_color = "#FFFFBF",
   high_color = "#4575B4",
   na_color = "grey90",
   
-  # 重复坐标的汇总方式
   aggregate_fun = "mean",
   
-  # 坐标轴标签
   x_break_step = 1,
   y_break_step = 1,
   x_angle = 45,
   x_digits = NULL,
   y_digits = NULL,
   
-  # 单元格设置
   tile_border = "white",
   tile_border_width = 0.2,
   
-  # 其他
   title = NULL,
   base_size = 13
 ) {
   
   #=========================================================
-  # 1. 检查输入数据
+  # 1. check input data
   #=========================================================
   
   if (!is.data.frame(data)) {
-    stop("data 必须是 data.frame 或 tibble")
+    stop("data must be data.frame or tibble")
   }
   
   required_cols <- c(x_col, y_col, fill_col)
   
   if (!all(required_cols %in% names(data))) {
     stop(
-      "以下列不存在：",
+      "The following does not exist:",
       paste(
         setdiff(required_cols, names(data)),
         collapse = ", "
@@ -231,20 +220,20 @@ plot_tile_heatmap <- function(
   }
   
   if (!is.numeric(data[[fill_col]])) {
-    stop("fill_col 必须为数值型变量")
+    stop("fill_col must be numeric type")
   }
   
   if (!aggregate_fun %in%
       c("mean", "median", "min", "max")) {
-    stop("aggregate_fun 只能为 mean、median、min、max")
+    stop("aggregate_fun only for mean、median、min、max")
   }
   
   if (x_break_step < 1 || y_break_step < 1) {
-    stop("坐标轴标签间隔必须 >= 1")
+    stop("The interval for axis labels must be >= 1")
   }
   
   #=========================================================
-  # 2. 构建绘图数据
+  # 2. Construct plotting data
   #=========================================================
   
   df <- data.frame(
@@ -262,11 +251,11 @@ plot_tile_heatmap <- function(
     ]
   
   if (nrow(df) == 0) {
-    stop("没有可用于绘图的有效数据")
+    stop("No valid data available for plotting")
   }
   
   #=========================================================
-  # 3. 根据原始值升序排序
+  # 3. Sort in ascending order based on the original values
   #=========================================================
   
   x_values <- sort(unique(df$x))
@@ -276,14 +265,14 @@ plot_tile_heatmap <- function(
   ny <- length(y_values)
   
   #=========================================================
-  # 4. 将实际值映射为等间隔坐标
+  # 4. Map actual values ​​to equally spaced coordinates
   #=========================================================
   
   df$x_id <- match(df$x, x_values)
   df$y_id <- match(df$y, y_values)
   
   #=========================================================
-  # 5. 汇总重复坐标组合
+  # 5. Summarize duplicate coordinate combinations
   #=========================================================
   
   fun <- switch(
@@ -301,7 +290,7 @@ plot_tile_heatmap <- function(
   )
   
   #=========================================================
-  # 6. 坐标轴标签格式
+  # 6. Axis label format
   #=========================================================
   
   format_labels <- function(values, digits = NULL) {
@@ -324,7 +313,7 @@ plot_tile_heatmap <- function(
   y_breaks <- seq(1, ny, by = y_break_step)
   
   #=========================================================
-  # 7. 设置默认标题
+  # 7. Set default title
   #=========================================================
   
   if (is.null(x_label)) x_label <- x_col
@@ -332,7 +321,7 @@ plot_tile_heatmap <- function(
   if (is.null(fill_label)) fill_label <- fill_col
   
   #=========================================================
-  # 8. 绘制热图
+  # 8. Generate a heatmap
   #=========================================================
   
   p <- ggplot(
@@ -423,7 +412,7 @@ plot_data <- summary_result3 %>%
     .groups = "drop"
   )
 
-# 计算双轴的线性缩放参数
+# Calculate the linear scaling parameters for both axes.
 omega_range <- range(
   c(plot_data$omega_ci_lower,
     plot_data$omega_ci_upper,
@@ -433,12 +422,12 @@ omega_range <- range(
 
 sd_range <- range(plot_data$cost_pro, na.rm = TRUE)
 
-# 避免范围为零时无法缩放
+# Prevent failure to scale when the range is zero
 if (diff(omega_range) == 0 || diff(sd_range) == 0) {
-  stop("omega_mean 或 omega_sd 的取值范围为零，无法进行双轴缩放。")
+  stop("The value range for omega_mean or omega_sd is zero, making dual-axis scaling impossible.")
 }
 
-# 将 omega_sd 映射到 omega_mean 的坐标范围
+# Map omega_sd to the coordinate range of omega_mean.
 scale_factor <- diff(omega_range) / diff(sd_range)
 
 plot_data <- plot_data %>%
@@ -448,7 +437,7 @@ plot_data <- plot_data %>%
   )
 
 p3_1 = ggplot(plot_data, aes(x = N)) +
-  # omega_mean 的 95% 置信区间
+  # 95% CI of omega_mean
   geom_ribbon(
     aes(
       ymin = omega_ci_lower,
@@ -458,7 +447,7 @@ p3_1 = ggplot(plot_data, aes(x = N)) +
     alpha = 0.18,
     na.rm = TRUE
   ) +
-  # omega_mean 曲线
+  # omega_mean curve
   geom_line(
     aes(y = omega_mean, color = "omega_mean"),
     linewidth = 1
@@ -467,7 +456,7 @@ p3_1 = ggplot(plot_data, aes(x = N)) +
     aes(y = omega_mean, color = "omega_mean"),
     size = 2
   ) +
-  # 误差曲线
+  # error curve
   geom_line(
     aes(y = sd_scaled, color = "omega_sd"),
     linewidth = 1,
@@ -538,10 +527,11 @@ ggsave(filename = file.path(output_dir, "EM-omega_by_size_optim.jpg"),p3_2,
        width = 8, height = 3.5, dpi = 300)
 
 # ============================================================
-## 4. 给定分配比例（1:1）时，分析采样数量对估计值的影响
+## 4. Analyze the impact of sample size on the estimated value, 
+##    given an allocation ratio of 1:1.
 # ============================================================
 set.seed(456)
-N_step <- 50 # 样本量变化步长
+N_step <- 50 # Sample size step size
 N_list <- seq(50,2000,by=N_step)
 
 results <- list(); k <- 1
@@ -571,30 +561,23 @@ result4 <- do.call(rbind,results)
 summary_result4 <- result4 %>%
   group_by(N) %>%
   summarise(
-    # 每种分配方式的数据量
     count = n(),
 
-    # omega_hat 的均值和样本方差
     omega_mean = mean(omega_hat, na.rm = TRUE),
     omega_sd  = sd(omega_hat, na.rm = TRUE),
     
-    # omega_hat 均值的 95%CI
     omega_ci_lower = quantile(omega_hat, 0.025, na.rm = TRUE),
     omega_ci_upper = quantile(omega_hat, 0.975, na.rm = TRUE),
     
-    # mu_hat 的均值和样本方差
     mu_mean = mean(mu_hat, na.rm = TRUE),
     mu_sd  = sd(mu_hat, na.rm = TRUE),
     
-    # mu_hat 均值的 95%CI
     mu_ci_lower = quantile(mu_hat, 0.025, na.rm = TRUE),
     mu_ci_upper = quantile(mu_hat, 0.975, na.rm = TRUE),
     
-    # sig_hat 的均值和样本方差
     sig_mean = mean(sig_hat, na.rm = TRUE),
     sig_sd  = sd(sig_hat, na.rm = TRUE),
     
-    # mu_hat 均值的 95%CI
     sig_ci_lower = quantile(sig_hat, 0.025, na.rm = TRUE),
     sig_ci_upper = quantile(sig_hat, 0.975, na.rm = TRUE),
     
@@ -604,42 +587,36 @@ summary_result4 <- result4 %>%
 plot_parameter_trends <- function(
   data,
   x_col = "N",
-  # 显示真实值
   param_set = c(
     omega = omega_true,
     mu    = mu,
     sig   = sigma
   ),
   
-  # 参数估计值列
   param_cols = c(
     omega = "omega",
     mu    = "mu",
     sig   = "sig"
   ),
   
-  # 经验区间下限
   lower_cols = c(
     omega = "omega_ci_lower",
     mu    = "mu_ci_lower",
     sig   = "sig_ci_lower"
   ),
   
-  # 经验区间上限
   upper_cols = c(
     omega = "omega_ci_upper",
     mu    = "mu_ci_upper",
     sig   = "sig_ci_upper"
   ),
   
-  # 子图标题
   param_labels = c(
     omega = "Omega",
     mu    = "Mu",
     sig   = "Sigma"
   ),
   
-  # 每个参数的颜色
   colors = c(
     omega = "#377EB8",
     mu    = "#E41A1C",
@@ -656,23 +633,23 @@ plot_parameter_trends <- function(
 ) {
   
   #========================================================
-  # 1. 检查数据
+  # 1. check data
   #========================================================
   
   if (!is.data.frame(data)) {
-    stop("data 必须为 data.frame 或 tibble")
+    stop("data must be data.frame or tibble")
   }
   
   param_names <- names(param_cols)
   
   if (is.null(param_names) ||
       any(!nzchar(param_names))) {
-    stop("param_cols 必须为带名称的字符向量")
+    stop("param_cols must be a named character vector")
   }
   
   if (!all(param_names %in% names(lower_cols)) ||
       !all(param_names %in% names(upper_cols))) {
-    stop("参数名称与区间列名称不一致")
+    stop("Parameter name does not match the column name for the range.")
   }
   
   required_cols <- unique(c(
@@ -686,7 +663,7 @@ plot_parameter_trends <- function(
   
   if (length(missing_cols) > 0) {
     stop(
-      "数据缺少以下列：",
+      "The data is missing the following columns:",
       paste(missing_cols, collapse = ", ")
     )
   }
@@ -696,11 +673,11 @@ plot_parameter_trends <- function(
     is.numeric,
     logical(1)
   ))) {
-    stop("样本量、估计值和经验区间列必须为数值型")
+    stop("Sample size, estimate, and empirical interval columns must be numeric")
   }
   
   #========================================================
-  # 2. 逐个参数绘图
+  # 2. Plotting parameters one by one
   #========================================================
   
   plot_list <- lapply(param_names, function(param) {
@@ -717,7 +694,7 @@ plot_parameter_trends <- function(
       upper = data[[upper_col]]
     )
     
-    # 剔除无效数据
+    # Remove invalid data
     plot_df <- plot_df[
       complete.cases(plot_df) &
         is.finite(plot_df$N) &
@@ -729,15 +706,15 @@ plot_parameter_trends <- function(
       ]
     
     if (nrow(plot_df) == 0) {
-      stop(paste("参数", param, "没有有效数据"))
+      stop(paste("Parameter", param, "without valid data"))
     }
     
-    # 检查经验区间
+    # Check the experience range
     if (any(plot_df$lower > plot_df$upper)) {
-      stop(paste("参数", param, "存在区间下限大于上限"))
+      stop(paste("Parameter", param, ": the lower bound of the interval is greater than the upper bound."))
     }
     
-    # 按样本量升序排列
+    # Sorted by sample size in ascending order
     plot_df <- plot_df[
       order(plot_df$N),
       ,
@@ -757,7 +734,7 @@ plot_parameter_trends <- function(
     }
     
     #======================================================
-    # 3. 单参数子图
+    # 3. Single-parameter subgraph
     #======================================================
     
     p <- ggplot(
@@ -812,7 +789,7 @@ plot_parameter_trends <- function(
   names(plot_list) <- param_names
   
   #========================================================
-  # 4. 合并子图
+  # 4. Merge subgraphs
   #========================================================
   
   combined_plot <- wrap_plots(
