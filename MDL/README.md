@@ -19,7 +19,7 @@ Bootstrap resampling can be applied to quantify estimation uncertainty and const
 | File | Description |
 |---|---|
 | `[simulation_cal.R]` | Simulation experiments evaluating estimation accuracy and precision under different sampling conditions. |
-| `[SI_tables.xlsx]` | Example dataset containing observations obtained under multiple detection limits. |
+| `[SI_tables.xlsx]` | Example dataset containing observations obtained under multiple detection limits. The data that support the findings of this study are available from the corresponding author upon reasonable request. |
 | `[example_cal.R]` | Example workflow demonstrating data preparation, parameter estimation, and result interpretation. |
 
 *Note: File names should be updated to match the actual repository contents.*
