@@ -1,13 +1,13 @@
-# Estimation of Zero-Inflation Proportions in Left-Censored Data
+# Estimation of Zero-exposure Proportions in Left-Censored Data
 
-This repository provides an R implementation of a maximum likelihood-based method for estimating the zero-inflation proportion (ZIP) in left-censored data with single detection limit (SDL) or multiple detection limits (MDLs).
+This repository provides an R implementation of a maximum likelihood-based method for estimating the zero-exposure proportion (ZEP) in left-censored data with single detection limit (SDL) or multiple detection limits (MDLs).
 
 ## File Description
 
 | File | Description |
 |---|---|
-| `SDL` | Main implementation of the zero-inflation estimation method for single detection limit. |
-| `MDL` | Main implementation of the zero-inflation estimation method for multiple detection limits. |
+| `SDL` | Main implementation of the zero-exposure estimation method for single detection limit. |
+| `MDL` | Main implementation of the zero-exposure estimation method for multiple detection limits. |
 
 ## Applications
 
