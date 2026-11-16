@@ -7,7 +7,7 @@ This repository provides an R implementation of a maximum likelihood-based metho
 | File | Description |
 |---|---|
 | `SDL` | Main implementation of the zero-inflation estimation method for single detection limit. |
-| `SDL` | Main implementation of the zero-inflation estimation method for multiple detection limits. |
+| `MDL` | Main implementation of the zero-inflation estimation method for multiple detection limits. |
 
 ## Applications
 
