@@ -2,15 +2,15 @@
 
 ## Overview
 
-This repository provides an R implementation of a maximum likelihood-based method for estimating the zero-inflation proportion (ZIP) in left-censored data with multiple detection limits (MDLs).
+This repository provides an R implementation of a maximum likelihood-based method for estimating the zero-exposure proportion (ZEP) in left-censored data with multiple detection limits (MDLs).
 
 The method is designed for environmental monitoring and exposure assessment datasets in which observations may contain both true zeros and positive values below the detection limits. By integrating information from different detection limits, the proposed method estimates the proportion of true zeros, helping distinguish zero exposure from unquantified low-level exposure.
 
 ## Method Description
 
-The method assumes a zero-inflated distribution consisting of a point mass at zero and a continuous distribution for positive observations. Given the parameters of the positive-value distribution, the zero-inflation proportion is estimated by maximizing the observed-data likelihood using an expectation-maximization (EM) algorithm or numerical optimization.
+The method assumes a zero-inflated distribution consisting of a point mass at zero and a continuous distribution for positive observations. Given the parameters of the positive-value distribution, the ZEP is estimated by maximizing the observed-data likelihood using an expectation-maximization (EM) algorithm or numerical optimization.
 
-For applications involving unknown distribution parameters, a profile likelihood approach can be used to jointly estimate the zero-inflation proportion and the parameters of the positive-value distribution under a specified parametric model.
+For applications involving unknown distribution parameters, a profile likelihood approach can be used to jointly estimate the ZEP and the parameters of the positive-value distribution under a specified parametric model.
 
 Bootstrap resampling can be applied to quantify estimation uncertainty and construct 95% confidence intervals.
 
